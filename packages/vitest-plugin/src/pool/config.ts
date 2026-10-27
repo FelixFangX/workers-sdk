@@ -12,6 +12,7 @@ import {
 	V4WorkerOptionsSchema,
 } from "miniflare";
 import { z } from "zod";
+import { getRemoteBindingsAuth } from "./auth";
 import {
 	getProjectPath,
 	getRelativeProjectConfigPath,
@@ -423,7 +424,12 @@ async function parseCustomPoolOptions(
 								: settings.complianceRegion,
 					},
 					preExistingRemoteProxySessionData ?? null,
-					undefined,
+					// `cloudflare.config.ts` belongs to cf, so use cf's credentials
+					getRemoteBindingsAuth(
+						path.dirname(configPath),
+						settings.accountId,
+						remoteBindingsLogger
+					),
 					{ cliDisplayName: "cf", logger: remoteBindingsLogger }
 				)
 			: null;
