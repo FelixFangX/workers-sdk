@@ -34,6 +34,7 @@ import {
 } from "./helpers";
 import { createLoopbackHandler } from "./loopback";
 import { handleModuleFallbackRequest } from "./module-fallback";
+import { mergeCloudflareConfigWorker } from "./new-config";
 import type { WorkersPoolOptionsWithDefines } from "./config";
 import type {
 	MiniflareOptions,
@@ -293,7 +294,10 @@ function convertUserWorkers(
 		);
 	}
 
-	let compatibilityDate = worker.compatibilityDate;
+	// `miniflare` options override the compatibility date in `cloudflare.config.ts`
+	let compatibilityDate =
+		worker.compatibilityDate ??
+		customOptions.loadedCloudflareConfig?.worker.compatibilityDate;
 	if (compatibilityDate === undefined) {
 		// No compatibility date was provided, so use the default
 		compatibilityDate = DEFAULT_COMPAT_DATE;
@@ -364,12 +368,20 @@ async function buildProjectWorkerOptions(
 	);
 	const runnerName = getRunnerName(project);
 	const configWorkerName = customOptions.resolvedConfig?.workerName;
-	const [userWorker, ...auxiliaryWorkers] = convertUserWorkers(
+	const [convertedWorker, ...auxiliaryWorkers] = convertUserWorkers(
 		project,
 		customOptions,
 		runnerName,
 		configWorkerName
 	);
+	const userWorker =
+		customOptions.loadedCloudflareConfig === undefined
+			? convertedWorker
+			: mergeCloudflareConfigWorker(
+					convertedWorker,
+					customOptions.loadedCloudflareConfig,
+					customOptions
+				);
 
 	// Configuration files name the Worker, but the runner that replaces it has a
 	// different name, so point references to that name at the runner

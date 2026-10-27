@@ -29,25 +29,31 @@
 ## WORKER CONFIGURATION SOURCES
 
 `parseCustomPoolOptions()` in `src/pool/config.ts` resolves at most one configuration
-file into a normalised `Config`, then shares every downstream step (remote proxy
-session, `unstable_getMiniflareWorkerOptions()`, `main`, defines, module rules, tails):
+file:
 
 - `wrangler: { configPath, environment }` — a Wrangler configuration file, via
-  `wrangler.unstable_readConfig()`
-- `experimental: { newConfig }` — a `cloudflare.config.ts`, via `src/pool/new-config.ts`
-  (`@cloudflare/config`'s `loadAndParseConfig()` → `convertToWranglerConfig()` →
-  `normalizeAndValidateConfig()`). Mirrors `@cloudflare/vite-plugin`'s
-  `experimental.newConfig`. `ctx.mode` comes from `project.vite.config.mode`.
+  `wrangler.unstable_readConfig()`, then `unstable_getMiniflareWorkerOptions()` (remote
+  proxy session, `main`, defines, module rules, tails) merged into the V4 `miniflare`
+  options
+- `config: true | "<path>"` — a `cloudflare.config.ts`, via `src/pool/new-config.ts`
+  (`@cloudflare/config`'s `loadAndParseConfig()`), never through Wrangler. `miniflare`
+  options are merged over the config's Worker. Secrets and Hyperdrive values are resolved
+  with Miniflare's `resolveLocalBindings()`, and remote bindings go
+  through `@cloudflare/remote-bindings`, which accepts the config's bindings as they
+  are. `ctx.mode` comes from `project.vite.config.mode`.
 
-The two are mutually exclusive. Whichever is used, the resolved path, config format and
-Worker name are recorded on `options.resolvedConfig` for the pool to consume — never
-re-read the config file from disk.
+The two are mutually exclusive, and setting both is an error. Neither file is loaded unless
+its option is set; without either, the Worker comes from `miniflare` options alone.
+Whichever is used, the resolved path, config format and Worker name are recorded on
+`options.resolvedConfig` for the pool to consume — never re-read the config file from disk.
 
 `buildProjectWorkerOptions()` in `src/pool/index.ts` builds the runner Worker in
 Miniflare's native `WorkerOptions` shape. The Worker under test comes from
-`convertV4MiniflareOptions()` for `wrangler`/`miniflare` options, takes the runner's
-name, and has its bindings to its configured name pointed at the runner. The pool's
-modules and internal bindings are then added on top.
+`convertV4MiniflareOptions()` for `wrangler`/`miniflare` options. With `config`,
+`mergeCloudflareConfigWorker()` in `src/pool/new-config.ts` merges those over the
+config's Worker, which is used as it is. The Worker takes the runner's name, and has its
+bindings to its configured name pointed at the runner. The pool's modules and internal
+bindings are then added on top.
 
 ## BUILD
 
