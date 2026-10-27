@@ -43,6 +43,12 @@ The two are mutually exclusive. Whichever is used, the resolved path, config for
 Worker name are recorded on `options.resolvedConfig` for the pool to consume — never
 re-read the config file from disk.
 
+`buildProjectWorkerOptions()` in `src/pool/index.ts` builds the runner Worker in
+Miniflare's native `WorkerOptions` shape. The Worker under test comes from
+`convertV4MiniflareOptions()` for `wrangler`/`miniflare` options, takes the runner's
+name, and has its bindings to its configured name pointed at the runner. The pool's
+modules and internal bindings are then added on top.
+
 ## BUILD
 
 `tsdown.config.ts` defines 2 separate builds (all ESM):

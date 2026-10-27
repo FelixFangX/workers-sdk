@@ -10,6 +10,7 @@ import { poolWorkerStarted, poolWorkerStopped } from "./pages";
 import { type WorkerPoolOptionsContext } from "./plugin";
 import {
 	assertCompatibleVitestVersion,
+	buildProjectMiniflareOptions,
 	connectToMiniflareSocket,
 	getDurableObjectDesignators,
 	getProjectMiniflare,
@@ -18,6 +19,7 @@ import {
 	structuredSerializableParse,
 	structuredSerializableStringify,
 } from ".";
+import type { DurableObjectDesignator } from ".";
 import type {
 	WorkersConfigPluginAPI,
 	WorkersPoolOptions,
@@ -109,6 +111,10 @@ export class CloudflarePoolWorker implements PoolWorker {
 	private readonly debug = util.debuglog("vitest-plugin");
 	private readonly moduleFetchRequestIds = new Set<string>();
 	private mf: Miniflare | undefined;
+	// Designators of the runner's Durable Objects, keyed by bound name
+	private durableObjectDesignators:
+		| Map<string, DurableObjectDesignator>
+		| undefined;
 	private socket: WebSocket | undefined;
 	private parsedPoolOptions: WorkersPoolOptionsWithDefines | undefined;
 	private main: string | undefined;
@@ -168,12 +174,17 @@ export class CloudflarePoolWorker implements PoolWorker {
 			api.setMain(this.main);
 		}
 
-		this.mf = await getProjectMiniflare(
+		const mfOptions = await buildProjectMiniflareOptions(
 			this.options.project.vitest,
 			this.options.project,
 			this.parsedPoolOptions,
 			this.main
 		);
+		// The runner's Durable Objects are only known once its options are built
+		this.durableObjectDesignators = getDurableObjectDesignators(
+			mfOptions.workers[0]
+		);
+		this.mf = await getProjectMiniflare(this.options.project, mfOptions);
 
 		this.socket = await connectToMiniflareSocket(
 			this.mf,
@@ -199,7 +210,7 @@ export class CloudflarePoolWorker implements PoolWorker {
 		const wasLastWorker = poolWorkerStopped();
 
 		// Remote proxy sessions are shared by all pool workers using the same
-		// Wrangler config, and consecutive workers overlap, so only dispose them
+		// config file, and consecutive workers overlap, so only dispose them
 		// once the last worker stops.
 		if (wasLastWorker) {
 			await disposeAllRemoteProxySessions().catch((err) => {
@@ -254,9 +265,7 @@ export class CloudflarePoolWorker implements PoolWorker {
 							// only used with classes defined in the current worker, as these
 							// helpers rely on wrapping the object.
 							durableObjectBindingDesignators: [
-								...getDurableObjectDesignators(
-									this.parsedPoolOptions
-								).entries(),
+								...(this.durableObjectDesignators ?? []),
 							],
 							selfName: getRunnerName(this.options.project),
 						}),
